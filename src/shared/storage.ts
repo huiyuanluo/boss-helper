@@ -18,6 +18,22 @@ export function antiDropEnabledKey(host: string) {
   return `${STORAGE_PREFIX}:anti-drop-enabled:${host}`
 }
 
+export function frameEnhancementEnabledKey(host: string) {
+  return `${STORAGE_PREFIX}:frame-enhancement-enabled:${host}`
+}
+
+export function frameAutoCollapseEnabledKey(host: string) {
+  return `${STORAGE_PREFIX}:frame-auto-collapse-enabled:${host}`
+}
+
+export function frameRecentModulesKey(host: string) {
+  return `${STORAGE_PREFIX}:frame-recent-modules:${host}`
+}
+
+export function frameRecentPagesKey(host: string, moduleName: string) {
+  return `${STORAGE_PREFIX}:frame-recent-pages:${host}:${encodeURIComponent(moduleName)}`
+}
+
 export function favoriteModulesKey(host: string) {
   return `${STORAGE_PREFIX}:favorite-modules:${host}`
 }
@@ -98,6 +114,113 @@ export function getAntiDropEnabled(host: string) {
 
 export function setAntiDropEnabled(host: string, enabled: boolean) {
   return storageSet(chrome.storage.sync, antiDropEnabledKey(host), enabled)
+}
+
+export function getFrameEnhancementEnabled(host: string) {
+  return storageGet(chrome.storage.sync, frameEnhancementEnabledKey(host), true)
+}
+
+export function setFrameEnhancementEnabled(host: string, enabled: boolean) {
+  return storageSet(chrome.storage.sync, frameEnhancementEnabledKey(host), enabled)
+}
+
+export function getFrameAutoCollapseEnabled(host: string) {
+  return storageGet(chrome.storage.sync, frameAutoCollapseEnabledKey(host), true)
+}
+
+export function setFrameAutoCollapseEnabled(host: string, enabled: boolean) {
+  return storageSet(chrome.storage.sync, frameAutoCollapseEnabledKey(host), enabled)
+}
+
+export interface FrameRecentModule {
+  id: string
+  name: string
+  openedAt: number
+}
+
+export function getFrameRecentModules(host: string) {
+  return storageGet<FrameRecentModule[]>(
+    chrome.storage.local,
+    frameRecentModulesKey(host),
+    []
+  )
+}
+
+export function setFrameRecentModules(host: string, modules: FrameRecentModule[]) {
+  return storageSet(
+    chrome.storage.local,
+    frameRecentModulesKey(host),
+    modules.slice(0, 6)
+  )
+}
+
+export async function upsertFrameRecentModule(
+  host: string,
+  module: Omit<FrameRecentModule, "openedAt"> & { openedAt?: number }
+) {
+  const current = await getFrameRecentModules(host)
+  const openedAt = module.openedAt || Date.now()
+  const next = [
+    {
+      id: module.id,
+      name: module.name,
+      openedAt
+    },
+    ...current.filter((item) => item.name !== module.name)
+  ].slice(0, 6)
+
+  await setFrameRecentModules(host, next)
+  return next
+}
+
+export interface FrameRecentPage {
+  text: string
+  title: string
+  href: string
+  pageType: "frontend" | "jsp"
+  openedAt: number
+}
+
+export function getFrameRecentPages(host: string, moduleName: string) {
+  return storageGet<FrameRecentPage[]>(
+    chrome.storage.local,
+    frameRecentPagesKey(host, moduleName),
+    []
+  )
+}
+
+export function setFrameRecentPages(
+  host: string,
+  moduleName: string,
+  pages: FrameRecentPage[]
+) {
+  return storageSet(
+    chrome.storage.local,
+    frameRecentPagesKey(host, moduleName),
+    pages.slice(0, 10)
+  )
+}
+
+export async function upsertFrameRecentPage(
+  host: string,
+  moduleName: string,
+  page: Omit<FrameRecentPage, "openedAt"> & { openedAt?: number }
+) {
+  const current = await getFrameRecentPages(host, moduleName)
+  const openedAt = page.openedAt || Date.now()
+  const next = [
+    {
+      text: page.text,
+      title: page.title,
+      href: page.href,
+      pageType: page.pageType,
+      openedAt
+    },
+    ...current.filter((item) => item.href !== page.href)
+  ].slice(0, 10)
+
+  await setFrameRecentPages(host, moduleName, next)
+  return next
 }
 
 export function getFavoriteModules(host: string) {

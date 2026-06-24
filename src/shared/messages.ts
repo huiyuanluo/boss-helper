@@ -42,6 +42,8 @@ export type ContentMessage =
   | { cmd: "content:getPageType" }
   | { cmd: "content:setLaunchpadEnabled"; enabled: boolean }
   | { cmd: "content:setAntiDropEnabled"; enabled: boolean }
+  | { cmd: "content:setFrameEnhancementEnabled"; enabled: boolean }
+  | { cmd: "content:setFrameAutoCollapseEnabled"; enabled: boolean }
   | { cmd: "content:determinePageType" }
   | { cmd: "content:openCurrentPage" }
   | { cmd: "content:openCurrentPageWithLocal" }

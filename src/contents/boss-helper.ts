@@ -3,6 +3,11 @@ import launchpadIconUrl from "data-base64:../../assets/launchpad.svg"
 import type { PlasmoCSConfig } from "plasmo"
 import { createRoot, type Root } from "react-dom/client"
 
+import { BossFrameApp } from "@/features/frame/BossFrameApp"
+import {
+  frameAppStyles,
+  frameGlobalStyles
+} from "@/features/frame/frameStyles"
 import { LaunchpadApp } from "@/features/LaunchpadApp"
 import { launchpadStyles } from "@/features/launchpadStyles"
 import {
@@ -17,8 +22,12 @@ import {
 } from "@/shared/nav"
 import {
   getAntiDropEnabled,
+  getFrameAutoCollapseEnabled,
+  getFrameEnhancementEnabled,
   getLaunchpadEnabled,
   setAntiDropEnabled,
+  setFrameAutoCollapseEnabled,
+  setFrameEnhancementEnabled,
   setLaunchpadEnabled
 } from "@/shared/storage"
 
@@ -39,9 +48,21 @@ export const config: PlasmoCSConfig = {
 let antiDropTimer: number | undefined
 let launchpadIconHost: HTMLElement | undefined
 let launchpadRoot: Root | undefined
+let frameRoot: Root | undefined
+let frameHost: HTMLElement | undefined
+let frameGlobalStyle: HTMLStyleElement | undefined
+let frameEnhancementActive = false
 
 function dispatchLaunchpadEvent(name: "show" | "hide") {
   window.dispatchEvent(new CustomEvent(`boss-helper:${name}-launchpad`))
+}
+
+function dispatchFrameAutoCollapseEvent(enabled: boolean) {
+  window.dispatchEvent(
+    new CustomEvent("boss-helper:set-frame-auto-collapse", {
+      detail: { enabled }
+    })
+  )
 }
 
 function createIconButton() {
@@ -125,6 +146,77 @@ function mountLaunchpadPanel(host: string) {
   launchpadRoot.render(React.createElement(LaunchpadApp, { host }))
 }
 
+function ensureFrameGlobalStyle() {
+  if (frameGlobalStyle) return
+
+  const style = document.createElement("style")
+  style.id = "boss-helper-frame-global-style"
+  style.textContent = frameGlobalStyles
+  ;(document.head || document.documentElement).appendChild(style)
+  frameGlobalStyle = style
+}
+
+function removeFrameGlobalStyle() {
+  frameGlobalStyle?.remove()
+  frameGlobalStyle = undefined
+}
+
+function isLoginPage() {
+  const pathname = window.location.pathname.toLowerCase()
+  if (pathname.includes("login")) return true
+
+  const hasPasswordInput = Boolean(document.querySelector('input[type="password"]'))
+  const hasLegacyFrameShell = Boolean(
+    document.querySelector("#J_NavContent") ||
+      document.querySelector("#J_Nav") ||
+      document.querySelector(".dl-main-nav")
+  )
+
+  return hasPasswordInput && !hasLegacyFrameShell
+}
+
+function mountFrameEnhancement(host: string) {
+  if (isLoginPage()) {
+    if (frameRoot) unmountFrameEnhancement()
+    return false
+  }
+
+  if (frameRoot) return true
+
+  ensureFrameGlobalStyle()
+  document.documentElement.classList.add("boss-helper-frame-enhanced")
+  frameEnhancementActive = true
+  dispatchLaunchpadEvent("hide")
+  unmountLaunchpadIcon()
+
+  const hostElement = document.createElement("div")
+  hostElement.id = "boss-helper-frame-root"
+  document.body.appendChild(hostElement)
+
+  const shadow = hostElement.attachShadow({ mode: "open" })
+  const style = document.createElement("style")
+  style.textContent = frameAppStyles
+
+  const appRoot = document.createElement("div")
+  shadow.append(style, appRoot)
+
+  frameRoot = createRoot(appRoot)
+  frameRoot.render(React.createElement(BossFrameApp, { host }))
+  frameHost = hostElement
+
+  return true
+}
+
+function unmountFrameEnhancement() {
+  frameRoot?.unmount()
+  frameRoot = undefined
+  frameHost?.remove()
+  frameHost = undefined
+  frameEnhancementActive = false
+  document.documentElement.classList.remove("boss-helper-frame-enhanced")
+  removeFrameGlobalStyle()
+}
+
 function cycleRequest() {
   fetch("/index", { credentials: "include" }).catch(() => undefined)
 }
@@ -195,12 +287,35 @@ async function handleMessage(message: ContentMessage): Promise<ContentResponse> 
   if (message.cmd === "content:setLaunchpadEnabled") {
     await setLaunchpadEnabled(window.location.hostname, message.enabled)
 
-    if (message.enabled) {
+    if (message.enabled && !frameEnhancementActive) {
       mountLaunchpadIcon()
     } else {
       dispatchLaunchpadEvent("hide")
       unmountLaunchpadIcon()
     }
+
+    return { ok: true, message: "ok" }
+  }
+
+  if (message.cmd === "content:setFrameEnhancementEnabled") {
+    await setFrameEnhancementEnabled(window.location.hostname, message.enabled)
+
+    if (message.enabled) {
+      mountFrameEnhancement(window.location.hostname)
+    } else {
+      unmountFrameEnhancement()
+
+      if (await getLaunchpadEnabled(window.location.hostname)) {
+        mountLaunchpadIcon()
+      }
+    }
+
+    return { ok: true, message: "ok" }
+  }
+
+  if (message.cmd === "content:setFrameAutoCollapseEnabled") {
+    await setFrameAutoCollapseEnabled(window.location.hostname, message.enabled)
+    dispatchFrameAutoCollapseEvent(message.enabled)
 
     return { ok: true, message: "ok" }
   }
@@ -245,8 +360,17 @@ async function init() {
     getLaunchpadEnabled(host),
     getAntiDropEnabled(host)
   ])
+  const [frameEnhancementEnabled, frameAutoCollapseEnabled] = await Promise.all([
+    getFrameEnhancementEnabled(host),
+    getFrameAutoCollapseEnabled(host)
+  ])
+  dispatchFrameAutoCollapseEvent(frameAutoCollapseEnabled)
 
-  if (launchpadEnabled) {
+  if (frameEnhancementEnabled) {
+    mountFrameEnhancement(host)
+  }
+
+  if (launchpadEnabled && !frameEnhancementActive) {
     mountLaunchpadIcon()
   }
 

@@ -42,8 +42,12 @@ import type {
 } from "@/shared/messages"
 import {
   getAntiDropEnabled,
+  getFrameAutoCollapseEnabled,
+  getFrameEnhancementEnabled,
   getLaunchpadEnabled,
   setAntiDropEnabled,
+  setFrameAutoCollapseEnabled,
+  setFrameEnhancementEnabled,
   setLaunchpadEnabled
 } from "@/shared/storage"
 
@@ -56,6 +60,8 @@ type BusyAction =
   | "load"
   | "launchpad"
   | "anti-drop"
+  | "frame"
+  | "auto-collapse"
   | "sync"
   | "manual"
   | "remove-local"
@@ -183,6 +189,32 @@ function boolBadge(value: boolean, trueText = "存在", falseText = "不存在")
   )
 }
 
+function getPreferredSourceHost(environment?: BossEnvironment) {
+  if (environment && BOSS_ENVIRONMENTS.some((item) => item.host === environment.host)) {
+    return environment.host
+  }
+
+  return BOSS_ENVIRONMENTS[0]!.host
+}
+
+async function ensureCookieStatusSource(
+  snapshot: CookieStatusSnapshot,
+  sourceHost: string
+) {
+  if (snapshot.settings.sourceHost === sourceHost) return snapshot
+
+  const response = await sendBackgroundMessage({
+    cmd: "cookie:updateSettings",
+    settings: {
+      ...snapshot.settings,
+      sourceHost
+    }
+  })
+
+  if (!response.ok) throw new Error(response.error)
+  return response.data as CookieStatusSnapshot
+}
+
 function StatusLine({
   label,
   children
@@ -201,6 +233,8 @@ function StatusLine({
 export function PopupApp() {
   const [activeTabState, setActiveTabState] = useState<ActiveTabState>({})
   const [cookieStatus, setCookieStatus] = useState<CookieStatusSnapshot>()
+  const [frameEnhancementEnabled, setFrameEnhancementEnabledState] = useState(true)
+  const [frameAutoCollapseEnabled, setFrameAutoCollapseEnabledState] = useState(true)
   const [launchpadEnabled, setLaunchpadEnabledState] = useState(true)
   const [antiDropEnabled, setAntiDropEnabledState] = useState(false)
   const [manualSid, setManualSid] = useState("")
@@ -228,16 +262,27 @@ export function PopupApp() {
     try {
       const tab = await getActiveTab()
       const environment = getEnvironmentByUrl(tab?.url)
+      const preferredSourceHost = getPreferredSourceHost(environment)
       setActiveTabState({ tab, environment })
       setPageType(undefined)
 
       if (environment) {
-        const [nextLaunchpadEnabled, nextAntiDropEnabled, nextPageType] = await Promise.all([
+        const [
+          nextFrameEnhancementEnabled,
+          nextFrameAutoCollapseEnabled,
+          nextLaunchpadEnabled,
+          nextAntiDropEnabled,
+          nextPageType
+        ] = await Promise.all([
+          getFrameEnhancementEnabled(environment.host),
+          getFrameAutoCollapseEnabled(environment.host),
           getLaunchpadEnabled(environment.host),
           getAntiDropEnabled(environment.host),
           getCurrentPageType()
         ])
 
+        setFrameEnhancementEnabledState(nextFrameEnhancementEnabled)
+        setFrameAutoCollapseEnabledState(nextFrameAutoCollapseEnabled)
         setLaunchpadEnabledState(nextLaunchpadEnabled)
         setAntiDropEnabledState(nextAntiDropEnabled)
         setPageType(nextPageType)
@@ -245,10 +290,24 @@ export function PopupApp() {
 
       const cookieResponse = await sendBackgroundMessage({ cmd: "cookie:getStatus" })
       if (cookieResponse.ok) {
-        setCookieStatus(cookieResponse.data as CookieStatusSnapshot)
+        const nextCookieStatus = await ensureCookieStatusSource(
+          cookieResponse.data as CookieStatusSnapshot,
+          preferredSourceHost
+        )
+        setCookieStatus(nextCookieStatus)
       } else {
         setNotice(cookieResponse.error)
-        if (cookieResponse.data) setCookieStatus(cookieResponse.data as CookieStatusSnapshot)
+        if (cookieResponse.data) {
+          try {
+            const nextCookieStatus = await ensureCookieStatusSource(
+              cookieResponse.data as CookieStatusSnapshot,
+              preferredSourceHost
+            )
+            setCookieStatus(nextCookieStatus)
+          } catch {
+            setCookieStatus(cookieResponse.data as CookieStatusSnapshot)
+          }
+        }
       }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "初始化失败")
@@ -282,6 +341,32 @@ export function PopupApp() {
       setLaunchpadEnabledState(enabled)
       await sendActiveTabMessage({
         cmd: "content:setLaunchpadEnabled",
+        enabled
+      })
+    })
+  }
+
+  async function updateFrameEnhancement(enabled: boolean) {
+    if (!activeEnv) return
+
+    await withBusy("frame", async () => {
+      await setFrameEnhancementEnabled(activeEnv.host, enabled)
+      setFrameEnhancementEnabledState(enabled)
+      await sendActiveTabMessage({
+        cmd: "content:setFrameEnhancementEnabled",
+        enabled
+      })
+    })
+  }
+
+  async function updateFrameAutoCollapse(enabled: boolean) {
+    if (!activeEnv) return
+
+    await withBusy("auto-collapse", async () => {
+      await setFrameAutoCollapseEnabled(activeEnv.host, enabled)
+      setFrameAutoCollapseEnabledState(enabled)
+      await sendActiveTabMessage({
+        cmd: "content:setFrameAutoCollapseEnabled",
         enabled
       })
     })
@@ -387,8 +472,11 @@ export function PopupApp() {
     })
   }
 
-  const loginCheck = cookieStatus?.loginCheck
   const selectedSourceHost = cookieStatus?.settings.sourceHost || BOSS_ENVIRONMENTS[0]!.host
+  const loginCheck =
+    cookieStatus?.loginCheck?.sourceHost === selectedSourceHost
+      ? cookieStatus.loginCheck
+      : undefined
 
   return (
     <main className="w-[430px] bg-background p-4 text-foreground">
@@ -541,8 +629,32 @@ export function PopupApp() {
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
+                <p className="text-sm font-medium">页面框架优化</p>
+                <p className="text-xs text-muted-foreground">重构菜单、页签和 iframe 外层框架</p>
+              </div>
+              <Switch
+                checked={frameEnhancementEnabled}
+                disabled={!isBossTab || Boolean(busyAction)}
+                onCheckedChange={updateFrameEnhancement}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">打开页面后收起一级菜单</p>
+                <p className="text-xs text-muted-foreground">点击页面项后自动隐藏一级菜单列</p>
+              </div>
+              <Switch
+                checked={frameAutoCollapseEnabled}
+                disabled={!isBossTab || !frameEnhancementEnabled || Boolean(busyAction)}
+                onCheckedChange={updateFrameAutoCollapse}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div>
                 <p className="text-sm font-medium">启动台功能</p>
-                <p className="text-xs text-muted-foreground">页面内模块搜索和跳转</p>
+                <p className="text-xs text-muted-foreground">
+                  {frameEnhancementEnabled ? "旧框架下展示入口" : "页面内模块搜索和跳转"}
+                </p>
               </div>
               <Switch
                 checked={launchpadEnabled}
@@ -555,7 +667,7 @@ export function PopupApp() {
                 <p className="text-sm font-medium">防掉线功能</p>
                 <p className="text-xs text-muted-foreground">
                   {activeEnv?.allowAntiDrop
-                    ? "每 5 分钟静默请求 /index"
+                    ? "如果电脑睡眠/网页被浏览器冻结则无法保持登录状态"
                     : "生产和 UAT 环境不提供"}
                 </p>
               </div>
