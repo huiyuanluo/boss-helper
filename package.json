@@ -1,0 +1,59 @@
+{
+  "name": "boss-helper",
+  "displayName": "Boss Helper",
+  "version": "0.2.0",
+  "description": "运营后台功能拓展",
+  "private": true,
+  "scripts": {
+    "dev": "plasmo dev",
+    "build": "plasmo build",
+    "package": "plasmo package",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-switch": "^1.1.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "pinyin-pro": "^3.26.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.5"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.280",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5",
+    "autoprefixer": "^10.4.20",
+    "plasmo": "^0.90.5",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2"
+  },
+  "manifest": {
+    "manifest_version": 3,
+    "name": "boss-helper",
+    "description": "运营后台功能拓展",
+    "permissions": [
+      "storage",
+      "tabs",
+      "cookies"
+    ],
+    "host_permissions": [
+      "https://dev-boss.5upay.com/*",
+      "https://qa-boss.5upay.com/*",
+      "https://uat-boss.5upay.com/*",
+      "https://qa-boss.geoswift.com/*",
+      "https://boss.5upay.com/*",
+      "https://qa-boss.ajbridge.com/*",
+      "https://uat-boss.ajbridge.com/*",
+      "https://boss.ajbridge.com/*",
+      "http://localhost:16000/*"
+    ],
+    "content_security_policy": {
+      "extension_pages": "script-src 'self'; object-src 'self'"
+    }
+  }
+}
