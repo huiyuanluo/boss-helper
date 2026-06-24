@@ -2,7 +2,7 @@
 
 Boss Helper 是一个基于 Plasmo、React 和 TypeScript 开发的 Chrome 扩展，用于优化旧版 Boss 运营后台的日常开发和使用体验。
 
-当前版本：`0.2.0`
+当前版本：`0.3.0`
 
 ## 核心功能
 
