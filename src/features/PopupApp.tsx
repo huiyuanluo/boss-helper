@@ -29,6 +29,7 @@ import { formatDateTime } from "@/lib/utils"
 import {
   BOSS_ENVIRONMENTS,
   getEnvironmentByUrl,
+  isBossIndexUrl,
   type BossEnvironment
 } from "@/shared/domains"
 import type {
@@ -245,6 +246,10 @@ export function PopupApp() {
 
   const activeEnv = activeTabState.environment
   const isBossTab = Boolean(activeEnv)
+  const isBossIndexTab = isBossIndexUrl(activeTabState.tab?.url)
+  const isFrameEnhancementAvailable = isBossTab && isBossIndexTab
+  const isFrameEnhancementActive =
+    frameEnhancementEnabled && isFrameEnhancementAvailable
 
   const sourceOptions = useMemo(
     () =>
@@ -630,11 +635,15 @@ export function PopupApp() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium">页面框架优化</p>
-                <p className="text-xs text-muted-foreground">重构菜单、页签和 iframe 外层框架</p>
+                <p className="text-xs text-muted-foreground">
+                  {isFrameEnhancementAvailable
+                    ? "重构菜单、页签和 iframe 外层框架"
+                    : "仅在 Boss /index 页面生效"}
+                </p>
               </div>
               <Switch
                 checked={frameEnhancementEnabled}
-                disabled={!isBossTab || Boolean(busyAction)}
+                disabled={!isFrameEnhancementAvailable || Boolean(busyAction)}
                 onCheckedChange={updateFrameEnhancement}
               />
             </div>
@@ -645,7 +654,11 @@ export function PopupApp() {
               </div>
               <Switch
                 checked={frameAutoCollapseEnabled}
-                disabled={!isBossTab || !frameEnhancementEnabled || Boolean(busyAction)}
+                disabled={
+                  !isFrameEnhancementAvailable ||
+                  !frameEnhancementEnabled ||
+                  Boolean(busyAction)
+                }
                 onCheckedChange={updateFrameAutoCollapse}
               />
             </div>
@@ -653,12 +666,16 @@ export function PopupApp() {
               <div>
                 <p className="text-sm font-medium">启动台功能</p>
                 <p className="text-xs text-muted-foreground">
-                  {frameEnhancementEnabled ? "旧框架下展示入口" : "页面内模块搜索和跳转"}
+                  {!isFrameEnhancementAvailable
+                    ? "仅在 Boss /index 页面显示入口"
+                    : isFrameEnhancementActive
+                      ? "新版框架下隐藏入口"
+                      : "页面内模块搜索和跳转"}
                 </p>
               </div>
               <Switch
                 checked={launchpadEnabled}
-                disabled={!isBossTab || Boolean(busyAction)}
+                disabled={!isFrameEnhancementAvailable || Boolean(busyAction)}
                 onCheckedChange={updateLaunchpad}
               />
             </div>

@@ -12,7 +12,8 @@ import { LaunchpadApp } from "@/features/LaunchpadApp"
 import { launchpadStyles } from "@/features/launchpadStyles"
 import {
   getEnvironmentByHost,
-  isBossHost
+  isBossHost,
+  isBossIndexUrl
 } from "@/shared/domains"
 import type { ContentMessage, ContentResponse } from "@/shared/messages"
 import {
@@ -175,8 +176,16 @@ function isLoginPage() {
   return hasPasswordInput && !hasLegacyFrameShell
 }
 
+function canMountFrameEnhancement() {
+  return isBossIndexUrl(window.location.href) && !isLoginPage()
+}
+
+function canShowLaunchpadEntry() {
+  return canMountFrameEnhancement()
+}
+
 function mountFrameEnhancement(host: string) {
-  if (isLoginPage()) {
+  if (!canMountFrameEnhancement()) {
     if (frameRoot) unmountFrameEnhancement()
     return false
   }
@@ -287,7 +296,7 @@ async function handleMessage(message: ContentMessage): Promise<ContentResponse> 
   if (message.cmd === "content:setLaunchpadEnabled") {
     await setLaunchpadEnabled(window.location.hostname, message.enabled)
 
-    if (message.enabled && !frameEnhancementActive) {
+    if (message.enabled && !frameEnhancementActive && canShowLaunchpadEntry()) {
       mountLaunchpadIcon()
     } else {
       dispatchLaunchpadEvent("hide")
@@ -305,7 +314,10 @@ async function handleMessage(message: ContentMessage): Promise<ContentResponse> 
     } else {
       unmountFrameEnhancement()
 
-      if (await getLaunchpadEnabled(window.location.hostname)) {
+      if (
+        canShowLaunchpadEntry() &&
+        (await getLaunchpadEnabled(window.location.hostname))
+      ) {
         mountLaunchpadIcon()
       }
     }
@@ -370,7 +382,7 @@ async function init() {
     mountFrameEnhancement(host)
   }
 
-  if (launchpadEnabled && !frameEnhancementActive) {
+  if (launchpadEnabled && !frameEnhancementActive && canShowLaunchpadEntry()) {
     mountLaunchpadIcon()
   }
 
