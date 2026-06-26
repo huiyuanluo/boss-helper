@@ -1,5 +1,7 @@
 import type { PlasmoCSConfig } from "plasmo"
 
+import { isBossIndexUrl } from "@/shared/domains"
+
 export const config: PlasmoCSConfig = {
   matches: [
     "https://dev-boss.5upay.com/*",
@@ -341,4 +343,6 @@ function installBridge() {
   })
 }
 
-installBridge()
+if (isBossIndexUrl(location.href)) {
+  installBridge()
+}

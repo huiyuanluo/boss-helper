@@ -114,6 +114,17 @@ export function isBossHost(host?: string | null) {
   return Boolean(getEnvironmentByHost(host))
 }
 
+export function isBossIndexUrl(rawUrl?: string | null) {
+  if (!rawUrl) return false
+
+  try {
+    const url = new URL(rawUrl)
+    return isBossHost(url.hostname) && url.pathname === "/index"
+  } catch {
+    return false
+  }
+}
+
 export function getBossUrl(host: string, path = "/") {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`
   return `https://${host}${normalizedPath}`
